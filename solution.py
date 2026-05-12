@@ -65,3 +65,5 @@ class AirConditioning:
                 return 'Кондиционер выключен'
         return None
 
+
+

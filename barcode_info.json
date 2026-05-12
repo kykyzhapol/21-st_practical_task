@@ -1,0 +1,20 @@
+{
+  "5901234123457": {
+    "name": "Молоко",
+    "country": "Польша",
+    "manufacturer": "Mlekovita",
+    "price": 89.90
+  },
+  "4006381333931": {
+    "name": "Шоколад",
+    "country": "Германия",
+    "manufacturer": "Milka",
+    "price": 120.50
+  },
+  "4601234567890": {
+    "name": "Хлеб",
+    "country": "Россия",
+    "manufacturer": "Хлебозавод №1",
+    "price": 45.00
+  }
+}
