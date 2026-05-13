@@ -1,46 +1,60 @@
-'''
-    Опишите класс корзины интернет магазина. Укажите необходимые атрибуты и методы.
-    Класс должен позволять хранить данные о товарах (экземплярах класса "Товар"). Используйте
-    защищенные атрибуты и методы. Хранение данных организуйте в файле. Добавьте возможность добавлять
-    и удалять товар из корзины. Корзина должна иметь атрибут общей стоимости всех выбранных товаров.
-    Класс "Товар" должен иметь параметр - целое число (штрих-код в стандарте EAN-13). Дополните класс атрибутами,
-    таким, например как, страна производитель товара и другими, которые заполняются по штрих-коду.
-    Необходимую для расшифровки штрих-кода информацию представьте в виде словаря в отдельном файле.
-    Используйте set и get методы для свойств данного класса. В демонстрационном примере реализуйте
-    возможность (с использованием меню) решать следующие задачи:
-    1. Загружать данные о товарах из файла.
-    2. Добавлять товар в корзину.
-    3. Удалить товар из корзины.
-    4. Посмотреть содержание корзины.
-'''
+"""
+Shopping cart system for an online store.
+
+Provides classes for products (identified by EAN-13 barcodes) and a shopping cart
+that stores products, calculates total price, and persists data to JSON files.
+"""
+
 import json
 import os
-# Глобальные данные: справочник штрих-кодов и доступный каталог товаров
-barcode_info = {}          # загружается из barcode_info.json
-available_barcodes = set() # загружается из файла каталога пользователем
+
+# Global data: barcode reference (loaded from barcode_info.json) and available product catalog
+barcode_info = {}           # Loaded from barcode_info.json
+available_barcodes = set()  # Loaded from a catalog file chosen by the user
+
 
 # ----------------------------------------------------------------------
-# Класс "Товар" с использованием защищённых атрибутов и property
+# Product class with protected attributes and property getters/setters
 # ----------------------------------------------------------------------
 class Product:
-    """Товар, идентифицируемый штрих-кодом EAN-13.
-       Остальные атрибуты заполняются из глобального словаря barcode_info."""
+    """
+    A product identified by an EAN-13 barcode.
+
+    Other attributes (name, country, price, manufacturer) are loaded
+    from the global barcode_info dictionary.
+    """
+
     def __init__(self, barcode: str):
+        """
+        Initialise a product with a barcode.
+
+        Args:
+            barcode: 13‑digit string representing the EAN‑13 code.
+        """
         self._barcode = None
         self._name = None
         self._country = None
         self._price = 0.0
         self._manufacturer = None
-        # установка штрих-кода автоматически заполнит остальные поля
+        # Setting the barcode automatically loads the remaining fields
         self.barcode = barcode
 
     @property
     def barcode(self) -> str:
+        """Return the product's barcode."""
         return self._barcode
 
     @barcode.setter
     def barcode(self, value: str) -> None:
-        """Устанавливает штрих-код (13 цифр) и загружает информацию о товаре."""
+        """
+        Set the barcode (must be 13 digits) and load product information.
+
+        Args:
+            value: The barcode string.
+
+        Raises:
+            ValueError: If the barcode does not contain exactly 13 digits.
+        """
         value_str = str(value)
         if not value_str.isdigit() or len(value_str) != 13:
             raise ValueError("Штрих-код должен содержать ровно 13 цифр")
@@ -49,6 +63,7 @@ class Product:
 
     @property
     def name(self) -> str:
+        """Return the product name."""
         return self._name
 
     @name.setter
@@ -57,6 +72,7 @@ class Product:
 
     @property
     def country(self) -> str:
+        """Return the country of origin."""
         return self._country
 
     @country.setter
@@ -65,16 +81,27 @@ class Product:
 
     @property
     def price(self) -> float:
+        """Return the product price."""
         return self._price
 
     @price.setter
     def price(self, value: float) -> None:
+        """
+        Set the product price.
+
+        Args:
+            value: New price.
+
+        Raises:
+            ValueError: If the price is negative.
+        """
         if value < 0:
             raise ValueError("Цена не может быть отрицательной")
         self._price = value
 
     @property
     def manufacturer(self) -> str:
+        """Return the manufacturer name."""
         return self._manufacturer
 
     @manufacturer.setter
@@ -82,7 +109,12 @@ class Product:
         self._manufacturer = value
 
     def _load_info_from_barcode(self) -> None:
-        """Защищённый метод: заполняет атрибуты товара из глобального barcode_info."""
+        """
+        Protected method: load product attributes from the global barcode_info.
+
+        Raises:
+            ValueError: If the barcode is not found in the reference data.
+        """
         if self._barcode not in barcode_info:
             raise ValueError(f"Информация о товаре с кодом {self._barcode} не найдена")
         info = barcode_info[self._barcode]
@@ -92,41 +124,73 @@ class Product:
         self._manufacturer = info.get('manufacturer', 'Неизвестно')
 
     def __repr__(self) -> str:
+        """Return a developer‑friendly string representation."""
         return f"Product({self._barcode}, {self._name}, {self._price} руб.)"
 
 
 # ----------------------------------------------------------------------
-# Класс "Корзина" с хранением данных в файле
+# Cart class with file‑based persistence
 # ----------------------------------------------------------------------
 class Cart:
-    """Корзина интернет-магазина. Хранит список товаров (экземпляров Product)."""
+    """
+    Shopping cart that stores a list of Product instances.
+
+    The cart automatically loads its contents from a JSON file on initialisation
+    and saves after every modification.
+    """
+
     def __init__(self, cart_file: str = "cart.json"):
-        self._items = []          # список объектов Product
+        """
+        Initialise the cart.
+
+        Args:
+            cart_file: Path to the JSON file used for persistence.
+        """
+        self._items = []          # List of Product objects
         self._total_price = 0.0
         self._cart_file = cart_file
-        self._load()              # попытка загрузить сохранённую корзину
+        self._load()              # Attempt to restore a previously saved cart
 
     @property
     def total_price(self) -> float:
+        """Return the total price of all products in the cart."""
         return self._total_price
 
     @property
     def items(self):
-        """Возвращает копию списка товаров (защита от внешнего изменения)."""
+        """
+        Return a copy of the product list to prevent external modification.
+
+        Returns:
+            list: A shallow copy of the internal product list.
+        """
         return self._items.copy()
 
     def _update_total(self) -> None:
-        """Защищённый метод: пересчитывает общую стоимость."""
+        """Protected method: recalculate the total price."""
         self._total_price = sum(item.price for item in self._items)
 
     def add_product(self, product: Product) -> None:
-        """Добавляет товар в корзину и сохраняет изменения."""
+        """
+        Add a product to the cart and persist the change.
+
+        Args:
+            product: The Product instance to add.
+        """
         self._items.append(product)
         self._update_total()
         self._save()
 
     def remove_product(self, barcode: str) -> bool:
-        """Удаляет первый товар с указанным штрих-кодом. Возвращает True, если удаление выполнено."""
+        """
+        Remove the first product matching the given barcode.
+
+        Args:
+            barcode: The barcode of the product to remove.
+
+        Returns:
+            True if a product was removed, False otherwise.
+        """
         barcode_str = str(barcode)
         for i, item in enumerate(self._items):
             if item.barcode == barcode_str:
@@ -137,7 +201,7 @@ class Cart:
         return False
 
     def show_contents(self) -> None:
-        """Выводит содержимое корзины на экран."""
+        """Print the current cart contents and total price."""
         if not self._items:
             print("\nКорзина пуста.\n")
             return
@@ -149,14 +213,18 @@ class Cart:
         print(f"Общая стоимость: {self._total_price:.2f} руб.\n")
 
     def _save(self) -> None:
-        """Защищённый метод: сохраняет список штрих-кодов в файл."""
+        """Protected method: save the list of barcodes to the JSON file."""
         barcodes = [item.barcode for item in self._items]
         with open(self._cart_file, 'w', encoding='utf-8') as f:
             json.dump(barcodes, f, ensure_ascii=False, indent=2)
 
     def _load(self) -> None:
-        """Защищённый метод: загружает список штрих-кодов из файла и восстанавливает товары.
-           Если barcode_info ещё не загружен, восстановление невозможно – корзина остаётся пустой."""
+        """
+        Protected method: load barcodes from the JSON file and reconstruct products.
+
+        If the global barcode_info is not yet loaded, restoration is impossible
+        and the cart remains empty.
+        """
         if not os.path.exists(self._cart_file):
             return
         try:
@@ -169,7 +237,7 @@ class Cart:
         items = []
         for bc in barcodes:
             try:
-                # Для создания Product требуется глобальный barcode_info
+                # Creating a Product requires the global barcode_info
                 items.append(Product(bc))
             except ValueError as e:
                 print(f"Не удалось загрузить товар {bc}: {e}")
@@ -178,10 +246,18 @@ class Cart:
 
 
 # ----------------------------------------------------------------------
-# Вспомогательные функции для работы с каталогом и справочником
+# Helper functions for loading the barcode reference and catalog
 # ----------------------------------------------------------------------
 def load_barcode_info(info_file: str = "barcode_info.json") -> None:
-    """Загружает справочник штрих-кодов из JSON-файла в глобальную переменную barcode_info."""
+    """
+    Load the barcode reference dictionary from a JSON file into the global variable.
+
+    Args:
+        info_file: Path to the JSON file.
+
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+    """
     global barcode_info
     if not os.path.exists(info_file):
         raise FileNotFoundError(f"Файл {info_file} не найден. Невозможно расшифровать штрих-коды.")
@@ -189,8 +265,14 @@ def load_barcode_info(info_file: str = "barcode_info.json") -> None:
         barcode_info = json.load(f)
     print(f"Справочник штрих-кодов загружен (записей: {len(barcode_info)}).")
 
+
 def load_catalog(catalog_file: str) -> None:
-    """Загружает доступные товары из файла (список штрих-кодов) в глобальную переменную available_barcodes."""
+    """
+    Load the list of available product barcodes from a JSON file into the global set.
+
+    Args:
+        catalog_file: Path to the JSON file containing a list of barcodes.
+    """
     global available_barcodes
     if not os.path.exists(catalog_file):
         print(f"Файл {catalog_file} не найден.")
@@ -200,21 +282,23 @@ def load_catalog(catalog_file: str) -> None:
     available_barcodes = set(str(bc) for bc in barcodes_list)
     print(f"Загружено доступных товаров: {len(available_barcodes)}.")
 
+
 # ----------------------------------------------------------------------
-# Демонстрационное меню
+# Demonstration menu
 # ----------------------------------------------------------------------
-def main():
-    # Предварительная загрузка справочника штрих-кодов (обязательно)
+def main() -> None:
+    """Main interactive menu for the shopping cart system."""
+    # Pre‑load the barcode reference (mandatory)
     try:
         load_barcode_info()
     except FileNotFoundError as e:
         print(e)
         return
 
-    # Создаём корзину (она автоматически пытается загрузить предыдущее состояние)
+    # Create the cart (it will attempt to load a previous state)
     cart = Cart("cart.json")
 
-    # Меню
+    # Main menu loop
     while True:
         print("\n===== МЕНЮ =====")
         print("1. Загрузить данные о товарах (каталог) из файла")
@@ -269,6 +353,6 @@ def main():
         else:
             print("Неверный пункт меню. Попробуйте снова.")
 
+
 if __name__ == "__main__":
     main()
-
